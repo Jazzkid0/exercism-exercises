@@ -39,28 +39,8 @@ pub fn eval(f: Forth, prog: String) -> Result(Forth, ForthError) {
 
 fn step(f: Forth, token: String) -> Result(Forth, ForthError) {
   case f {
-    Forth(stack, vars, Continue) -> {
-      case dict.get(vars, string.uppercase(token)) {
-        Ok(var) -> list.try_fold(var, f, step)
-        Error(_) -> {
-          let operation_size = case string.uppercase(token) {
-            "SWAP"|"OVER"|"+"|"-"|"*"|"/" -> 2
-            "DROP"|"DUP"                  -> 1
-            _                             -> 0
-          }
-          let underflow = operation_size > list.length(stack)
-          let first_is_zero = list.first(stack) == Ok(0)
-          case token, operation_size, int.parse(token) {
-             t , n, Error(_) if n <= 0 && t != ":"     -> Error(UnknownWord)
-             _ , _, Error(_) if underflow              -> Error(StackUnderflow)
-            "/", n, Error(_) if n > 0 && first_is_zero -> Error(DivisionByZero)
-            ":", _, Error(_)                           -> Ok(Forth(..f, state: DefinitionName))
-             _ , n, Error(_) if n > 0                  -> Ok(Forth(..f, stack: execute(stack, string.uppercase(token))))
-             _ , _, Ok(x)                              -> Ok(Forth(..f, stack: [x, ..stack]))
-             _ , _, _                                  -> panic as "Unreachable case"
-          }
-        }
-      }
+    Forth(_, _, Continue) -> {
+      continue(f, token)
     }
     Forth(_, _, DefinitionName) -> {
       case int.parse(token) {
@@ -71,10 +51,36 @@ fn step(f: Forth, token: String) -> Result(Forth, ForthError) {
     Forth(_, vars, DefinitionValue(key, val)) -> {
       case token {
         ";" -> Ok(Forth(..f, vars: dict.insert(f.vars, key, val), state: Continue))
-        _   -> case dict.get(vars, token) {
+        _   -> case dict.get(vars, string.uppercase(token)) {
           Ok(var)  -> Ok(Forth(..f, state: DefinitionValue(key, list.append(var, val))))
           Error(_) -> Ok(Forth(..f, state: DefinitionValue(key, [token, ..val])))
         }
+      }
+    }
+  }
+}
+
+fn continue(f: Forth, token: String) {
+  let stack = f.stack
+  case dict.get(f.vars, string.uppercase(token)) {
+    // Ok(var) -> list.try_fold(list.reverse(var), f, continue)
+    Ok(var) -> list.try_fold(list.reverse(var), f, continue)
+    Error(_) -> {
+      let operation_size = case string.uppercase(token) {
+        "SWAP"|"OVER"|"+"|"-"|"*"|"/" -> 2
+        "DROP"|"DUP"                  -> 1
+        _                             -> 0
+      }
+      let underflow = operation_size > list.length(stack)
+      let first_is_zero = list.first(stack) == Ok(0)
+      case token, operation_size > 0, int.parse(token) {
+        ":", False, Error(_)                  -> Ok(Forth(..f, state: DefinitionName))
+         _ , False, Error(_)                  -> Error(UnknownWord)
+         _ , True , Error(_) if underflow     -> Error(StackUnderflow)
+        "/", True , Error(_) if first_is_zero -> Error(DivisionByZero)
+         _ , True , Error(_)                  -> Ok(Forth(..f, stack: execute(stack, string.uppercase(token))))
+         _ , False, Ok(x)                     -> Ok(Forth(..f, stack: [x, ..stack]))
+         _ , _    , _                         -> panic as "Unreachable case"
       }
     }
   }
