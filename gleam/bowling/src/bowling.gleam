@@ -15,20 +15,30 @@ pub type Error {
   GameNotComplete
 }
 
+// list.fold(list(int), Game([]), fn(game, pins) {
+//   let assert Ok(new_game) = roll(game, pins)
+//   new game})
+//   |> score()
+
+// roll() simply takes the current state of the game (a list of frames) and places the input roll in the right frame.
 pub fn roll(game: Game, knocked_pins: Int) -> Result(Game, Error) {
-  // find a way to async build frame by frame
-  // it's annoying af to check the state of a frame
-  let current_frame = case list.last(game.frames) {
-    Ok(frame) -> frame
-    Error(_) -> Frame([], [])
-  }
-  case list.length(game.frames), list.length(current_frame.rolls) {
-    f, r if f >= 10 || r >= 3 -> GameComplete
+  // iterate through the Game (a list of frames) until there's an empty spot, or error.
+  // build a new game as you do so?
+  // don't worry about bonus for now?
+  let frame_count = list.length(game.frames)
+
+  case list.at(game.frames, frame_count - 1), frame_count {
+    Error(Nil), 0 -> Ok(Game([Frame([knocked_pins], [])]))
+    Error(_), _ -> panic
     _, _ -> todo
   }
 }
 
 pub fn score(game: Game) -> Result(Int, Error) {
+  iter_score(game.frames, [], 0)
+}
+
+fn iter_score(frames: List(Frame), acc: List(Frame), score: Int) -> Result(Int, Error) {
   todo
 }
 
