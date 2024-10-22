@@ -27,19 +27,33 @@ pub fn roll(game: Game, knocked_pins: Int) -> Result(Game, Error) {
   // don't worry about bonus for now?
   let frame_count = list.length(game.frames)
 
-  case list.at(game.frames, frame_count - 1), frame_count {
+  case list.last(list.take(game.frames, frame_count - 1)), frame_count {
     Error(Nil), 0 -> Ok(Game([Frame([knocked_pins], [])]))
     Error(_), _ -> panic
+    _, count if count > 10 -> panic
     _, _ -> todo
   }
 }
 
 pub fn score(game: Game) -> Result(Int, Error) {
-  iter_score(game.frames, [], 0)
+  case list.length(game.frames) {
+    a if a < 10 -> Error(GameNotComplete)
+    // TODO: Check for incomplete last frame
+    a if a == 10 -> iter_score(game.frames, 0)
+    _ -> panic
+  }
 }
 
-fn iter_score(frames: List(Frame), acc: List(Frame), score: Int) -> Result(Int, Error) {
-  todo
+fn iter_score(frames: List(Frame), score: Int) -> Result(Int, Error) {
+  case frames {
+    [last] -> Ok(score + frame_score(last))
+    [head, ..tail] -> iter_score(tail, frame_score(head))
+    _ -> todo
+  }
+}
+
+fn frame_score(frame: Frame) -> Int {
+  result.unwrap(list.first(frame.bonus), 0) + list.fold(frame.rolls, 0, fn(roll, acc) { roll + acc })
 }
 
 // TODO: 
