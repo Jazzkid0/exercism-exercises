@@ -1,5 +1,5 @@
+import gleam/int
 import gleam/list
-import gleam/result
 
 pub opaque type Frame {
   Frame(rolls: List(Int), bonus: List(Int))
@@ -15,68 +15,152 @@ pub type Error {
   GameNotComplete
 }
 
-// list.fold(list(int), Game([]), fn(game, pins) {
-//   let assert Ok(new_game) = roll(game, pins)
-//   new game})
-//   |> score()
-
-// roll() simply takes the current state of the game (a list of frames) and places the input roll in the right frame.
 pub fn roll(game: Game, knocked_pins: Int) -> Result(Game, Error) {
-  // iterate through the Game (a list of frames) until there's an empty spot, or error.
-  // build a new game as you do so?
-  // don't worry about bonus for now?
-  let frame_count = list.length(game.frames)
-
-  case list.last(list.take(game.frames, frame_count - 1)), frame_count {
-    Error(Nil), 0 -> Ok(Game([Frame([knocked_pins], [])]))
-    Error(_), _ -> panic
-    _, count if count > 10 -> panic
-    _, _ -> todo
+  case knocked_pins {
+    p if p >= 0 && p <= 10 -> apply_roll(game, p)
+    _ -> Error(InvalidPinCount)
   }
 }
 
 pub fn score(game: Game) -> Result(Int, Error) {
-  case list.length(game.frames) {
-    a if a < 10 -> Error(GameNotComplete)
-    // TODO: Check for incomplete last frame
-    a if a == 10 -> iter_score(game.frames, 0)
-    _ -> panic
-  }
-}
-
-fn iter_score(frames: List(Frame), score: Int) -> Result(Int, Error) {
+  let Game(frames) = game
   case frames {
-    [last] -> Ok(score + frame_score(last))
-    [head, ..tail] -> iter_score(tail, frame_score(head))
-    _ -> todo
+    [] -> Error(GameNotComplete)
+    _ -> {
+      let frame_count = list.length(frames)
+      case list.reverse(frames) {
+        [last, .._] -> case frame_count, frame_complete(last, 9) {
+          10, True -> Ok(score_frames(frames, 0))
+          _, _ -> Error(GameNotComplete)
+        }
+        [] -> Error(GameNotComplete)
+      }
+    }
   }
 }
 
-fn frame_score(frame: Frame) -> Int {
-  result.unwrap(list.first(frame.bonus), 0) + list.fold(frame.rolls, 0, fn(roll, acc) { roll + acc })
+fn apply_roll(game: Game, pins: Int) -> Result(Game, Error) {
+  let Game(frames) = game
+  case list.reverse(frames) {
+    [] -> Ok(Game([Frame([pins], [])]))
+    [last, .._] -> {
+      let frame_count = list.length(frames)
+      let last_index = frame_count - 1
+
+      case frame_count, frame_complete(last, last_index) {
+        10, True -> Error(GameComplete)
+        _, _ -> case frame_complete(last, last_index) {
+          True -> case frame_count {
+            count if count < 10 -> {
+              Ok(Game(list.append(frames, [Frame([pins], [])])))
+            }
+            _ -> Error(GameComplete)
+          }
+          False -> case last_index {
+            index if index < 9 -> append_normal_frame(frames, last, pins)
+            _ -> append_final_frame(frames, last, pins)
+          }
+        }
+      }
+    }
+  }
 }
 
-// TODO: 
-// Parse the list of rolls (int) into a list of frames. This happens inside a list.fold(), so do it one roll at a time.
-// Evaluate this list of frames for the total score [score].
-//
-// NOTE:
-// Spare is 10 + next throw, Strike is 10 plus next two throws (even if it's two strikes)
-// Frame type contains the rolls in the frame, plus the bonus points from following rolls
-//
-// NOTE:
-// below is the function used to test valid games
-// it takes a list of ints, no separation in tuples etc
-// this means strikes are 1 roll, and final frame can be 3.
-// PARSE ITERATIVELY
-//
-// fn roll_and_check_score(rolls: List(Int), correct_score: Int) {
-//   rolls
-//   |> list.fold(Game([]), fn(game, pins) {
-//     let assert Ok(new_game) = roll(game, pins)
-//     new_game
-//   })
-//   |> score()
-//   |> should.equal(Ok(correct_score))
-// }
+fn append_normal_frame(
+  frames: List(Frame),
+  last: Frame,
+  pins: Int,
+) -> Result(Game, Error) {
+  let Frame(rolls, bonus) = last
+  case rolls {
+    [a] if a < 10 && a + pins <= 10 -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([a, pins], bonus)])))
+    }
+    _ -> Error(InvalidPinCount)
+  }
+}
 
+fn append_final_frame(
+  frames: List(Frame),
+  last: Frame,
+  pins: Int,
+) -> Result(Game, Error) {
+  let Frame(rolls, bonus) = last
+  case rolls {
+    [10] -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([10, pins], bonus)])))
+    }
+    [a] if a < 10 && a + pins <= 10 -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([a, pins], bonus)])))
+    }
+    [10, 10] -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([10, 10, pins], bonus)])))
+    }
+    [10, b] if b < 10 && b + pins <= 10 -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([10, b, pins], bonus)])))
+    }
+    [a, b] if a < 10 && a + b == 10 -> {
+      Ok(Game(frames |> list.take(list.length(frames) - 1) |> list.append([Frame([a, b, pins], bonus)])))
+    }
+    _ -> Error(InvalidPinCount)
+  }
+}
+
+fn frame_complete(frame: Frame, frame_index: Int) -> Bool {
+  case frame_index {
+    i if i < 9 -> {
+      case frame {
+        Frame([10], _) -> True
+        Frame([_, _], _) -> True
+        _ -> False
+      }
+    }
+    _ -> {
+      case frame {
+        Frame([_, _, _], _) -> True
+        Frame([a, b], _) if a + b < 10 -> True
+        _ -> False
+      }
+    }
+  }
+}
+
+type FrameType {
+  Strike
+  Spare
+  Basic
+}
+
+fn score_frames(frames: List(Frame), index: Int) -> Int {
+  case frames |> list.drop(index) |> list.first {
+    Error(Nil) -> 0
+    Ok(Frame(rolls, bonus)) -> case index {
+      9 -> int.sum(rolls)
+      _ -> case get_frame_type(Frame(rolls, bonus)) {
+        Strike -> 10 + int.sum(next_rolls(frames, index, 2)) + score_frames(frames, index + 1)
+        Spare -> 10 + int.sum(next_rolls(frames, index, 1)) + score_frames(frames, index + 1)
+        Basic -> int.sum(rolls) + score_frames(frames, index + 1)
+      }
+    }
+  }
+}
+
+fn next_rolls(frames: List(Frame), index: Int, count: Int) -> List(Int) {
+  frames
+  |> list.drop(index + 1)
+  |> list.map(fn(f) {
+    case f {
+      Frame(rs, _) -> rs
+    }
+  })
+  |> list.flatten
+  |> list.take(count)
+}
+
+fn get_frame_type(frame: Frame) {
+  case frame {
+    Frame([10], _) -> Strike
+    Frame([a, b], _) if a + b == 10 -> Spare
+    _ -> Basic
+  }
+}
