@@ -16,6 +16,7 @@
                         rustup
                         cargo
                         rust-analyzer
+                        vimPlugins.rustaceanvim
                     ];
 
                     dontSetPrompt = true;
