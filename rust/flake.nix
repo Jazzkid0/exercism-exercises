@@ -10,6 +10,7 @@
             in
                 pkgs.mkShell {
                     buildInputs = with pkgs; [
+                        starship
                         exercism
                         git
                         rustup
@@ -17,7 +18,11 @@
                         rust-analyzer
                     ];
 
+                    dontSetPrompt = true;
+
                     shellHook = ''
+                        export FLAKE_DESC="[exercism-rust] "
+                        eval "$(starship init bash)"
                         exercism configure -w /home/jazzkid/projects/personal/exercism
                     '';
                 };
